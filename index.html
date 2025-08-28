@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Doodles Downloader – ETH + IPFS (client‑side)</title>
+  <title>Doodles Downloader – ETH + IPFS (client-side)</title>
   <style>
     :root { --bg:#0f1115; --card:#171a21; --text:#eef2ff; --muted:#9aa3b2; --acc:#8ab4ff; }
     *{box-sizing:border-box} body{margin:0; font:15px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
@@ -20,29 +20,19 @@
     .row + .row, .row3 + .row, .row + .row3{margin-top:12px}
     .hint{font-size:12px; color:#b5bed0}
     .split{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
-      /* Overlay preview per iPad/iOS */
-    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.86);display:none;align-items:center;justify-content:center;padding:16px;z-index:9999}
-    .overlay img.preview{max-width:min(95vw,1400px);max-height:88vh;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
-    .overlay .actions{position:absolute;top:12px;right:12px;display:flex;gap:8px}
-    .overlay .action{background:#0d1016;color:#eef2ff;border:1px solid #2a3142;border-radius:10px;padding:8px 12px;cursor:pointer}
-    .overlay .hint{position:absolute;bottom:14px;left:0;right:0;text-align:center;color:#b5bed0;font-size:12px}
   </style>
   <!-- JSZip per creare lo ZIP client-side -->
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>Doodles Downloader (solo client‑side, ideale su iPad)</h1>
-<div class="split"><span class="badge" id="ver">v‑loading…</span></div>
+      <h1>Doodles Downloader (solo client-side, ideale su iPad)</h1>
       <p class="muted">Scarica metadati + immagini direttamente da <span class="badge">Ethereum RPC</span> e <span class="badge">IPFS</span>, senza server né API key.</p>
 
       <div class="row">
         <div>
-          <label>Indirizzo contratto (ERC‑721)</label>
+          <label>Indirizzo contratto (ERC-721)</label>
           <input id="contract" value="0x8a90CAb2b38dba80c64b7734e58Ee1dB38B8992e" />
           <div class="hint">Default: Doodles (mainnet). Puoi cambiarlo per altre collezioni compatibili.</div>
         </div>
@@ -98,11 +88,11 @@
         </div>
         <div>
           <label>&nbsp;</label>
-          <button id="go" class="btn" onclick="download()">Scarica</button>
+          <button id="go" class="btn">Scarica ZIP / Apri</button>
         </div>
       </div>
 
-      <p class="hint" style="margin-top:10px">Suggerimento iPad: dopo il download, il file .zip finisce nell’app “File”. Puoi anche usare “Aggiungi a Home” in Safari per installare questa pagina come web app.</p>
+      <p class="hint" style="margin-top:10px">Suggerimento iPad: dopo il download, il file .zip finisce nell’app “File”. In modalità “ID singolo” l’immagine si apre direttamente in una nuova scheda.</p>
 
       <label style="margin-top:16px">Log</label>
       <div id="log" class="log"></div>
@@ -110,35 +100,6 @@
   </div>
 
 <script>
-// ====== Bootstrap & anti-cache ======
-const APP_VERSION = '2025-08-28-2';
-try { document.getElementById('ver').textContent = 'v ' + APP_VERSION; } catch {}
-// Error tap: mostra errori JS nel log
-window.addEventListener('error', function(e){ try{ log('⚠️ JS error: ' + e.message); }catch{} });
-window.addEventListener('unhandledrejection', function(e){
-  var msg = '⚠️ Promise error';
-  try {
-    var r = e.reason; msg += ': ' + (r && (r.message || r.toString()));
-  } catch {}
-  try{ log(msg); }catch{}
-});
-// Svuota eventuali Service Worker residui su questo scope (in caso di test PWA precedenti)
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(function(regs){ regs.forEach(function(r){ r.unregister(); }); });
-}
-// Se la pagina torna dal back-forward cache di iOS, forza reload
-window.addEventListener('pageshow', function(e){ if (e.persisted) location.reload(); });
-
-// ====== Config in-page ======
-const APP_VERSION = '2025-08-28-1';
-try { document.getElementById('ver').textContent = 'v ' + APP_VERSION; } catch {}
-// Svuota eventuali Service Worker residui su questo scope (in caso di test PWA precedenti)
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
-}
-// Se la pagina torna dal back-forward cache di iOS, forza reload
-window.addEventListener('pageshow', (e)=>{ if (e.persisted) location.reload(); });
-
 // ====== Config in-page ======
 const DEFAULT_RPC_LIST = [
   'https://cloudflare-eth.com',
@@ -198,20 +159,18 @@ async function rpcCall(method, params, rpcList){
 }
 
 function ipfsToUrls(uri, gws){
-  const stamp = 'v=' + APP_VERSION + '-' + Date.now();
-  const addCb = (u) => u + (u.includes('?') ? '&' : '?') + stamp;
   if(typeof uri !== 'string') return [];
   if(uri.startsWith('ipfs://')){
     const path = uri.replace('ipfs://','');
-    return gws.map(gw => addCb(gw + path));
+    return gws.map(gw => gw + path);
   }
-  return [addCb(uri)];
+  return [uri];
 }
 
 async function fetchJsonAny(urls){
   for(const u of urls){
     try{
-      const r = await fetch(u, { cache:'no-store', headers: { 'Accept':'application/json' } });
+      const r = await fetch(u, { headers: { 'Accept':'application/json' } });
       if(r.ok){
         try{ return await r.json(); }catch{}
       }
@@ -223,7 +182,7 @@ async function fetchJsonAny(urls){
 async function fetchBytesAny(urls){
   for(const u of urls){
     try{
-      const r = await fetch(u, { cache:'no-store' });
+      const r = await fetch(u);
       if(r.ok){
         const ct = (r.headers.get('content-type')||'').toLowerCase();
         const blob = await r.blob();
@@ -250,19 +209,46 @@ async function fetchBytesAny(urls){
   return null;
 }
 
+// --- Apertura robusta su iPad/PC: pre-apri una scheda al click e poi carica il blob ---
+let pendingWin = null;
+function preparePopupIfSingle(mode){
+  if(mode === 'single'){
+    try { pendingWin = window.open('', '_blank'); } catch { pendingWin = null; }
+  } else {
+    pendingWin = null;
+  }
+}
+function openBlobInNewTab(blob){
+  const url = URL.createObjectURL(blob);
+  // Se abbiamo una scheda già aperta dal gesto utente (iOS safe), usiamola
+  if(pendingWin && !pendingWin.closed){
+    pendingWin.location = url;
+    pendingWin = null;
+  } else {
+    // fallback: apri in nuova scheda
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.click();
+  }
+  // Rilascia l'URL dopo un po'
+  setTimeout(()=>URL.revokeObjectURL(url), 60000);
+}
+
 async function fetchOne(tokenId, contract, rpcList, gws){
   // 1) tokenURI(uint256)
   const selector = '0xc87b56dd'; // tokenURI
   const data = selector + pad32hex(tokenId);
   const callObj = { to: contract, data };
   const result = await rpcCall('eth_call', [callObj, 'latest'], rpcList);
-  if(!result) throw new Error('RPC failure for token #' + tokenId);
+  if(!result) throw new Error('RPC failure for token ' + tokenId);
   const tokenUri = decodeAbiString(result);
-  if(!tokenUri) throw new Error('decode tokenURI failed for #' + tokenId);
+  if(!tokenUri) throw new Error('decode tokenURI failed for ' + tokenId);
 
   // 2) metadata
   const meta = await fetchJsonAny(ipfsToUrls(tokenUri, gws));
-  if(!meta) throw new Error('metadata unavailable for #' + tokenId);
+  if(!meta) throw new Error('metadata unavailable for ' + tokenId);
 
   // 3) image
   const imageUri = meta.image || meta.image_url || meta.imageIpfs;
@@ -287,6 +273,8 @@ async function download(){
     const gws = [gwFirst, ...DEFAULT_IPFS_GWS.filter(x=>x!==gwFirst)];
 
     const mode = $('#mode').value;
+    preparePopupIfSingle(mode); // <= pre-apre la scheda se "single" (iOS friendly)
+
     let ids = [];
     if(mode==='range'){
       const s = parseInt($('#startId').value,10);
@@ -301,20 +289,21 @@ async function download(){
       ids = [n];
     }
 
-    // === Modalità SINGOLO: apri direttamente l'immagine (con fallback iPad overlay) ===
+    // === Modalità SINGOLO: apri direttamente l'immagine in una nuova scheda ===
     if(ids.length===1 && mode==='single'){
       const id = ids[0];
-      log('Carico #' + id + ' …');
+      log('Carico ' + id + ' …');
       const {meta, image, ext, type} = await fetchOne(id, contract, rpcList, gws);
       if(image){
         const blob = new Blob([image], {type: type || (ext==='.png'?'image/png': ext==='.jpg'?'image/jpeg': ext==='.gif'?'image/gif':'application/octet-stream')});
-        await openBlobSmart(blob, `#${id}${ext}`);
-        log('✅ Immagine aperta. Se non vedi una nuova scheda su iPad, è comparsa una **preview**: tieni premuto per salvare.');
+        openBlobInNewTab(blob);
+        log('✅ Immagine aperta in una nuova scheda. Su iPad: tocca e tieni premuto per salvare.');
       } else {
+        // se non c'è immagine, scarica JSON (senza # nel nome)
         const blob = new Blob([JSON.stringify(meta,null,2)], {type:'application/json'});
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `#${id}.json`;
+        a.download = `${id}.json`;
         a.click();
         URL.revokeObjectURL(a.href);
         log('⚠️ Nessuna immagine nei metadata: scaricato JSON.');
@@ -322,25 +311,26 @@ async function download(){
       return;
     }
 
-    // === Range o multi: ZIP come prima ===
+    // === Range o multi: ZIP ===
     log('Avvio download: ' + ids.length + ' token…');
     const zip = new JSZip();
     let ok = 0;
     for(const id of ids){
       try{
-        log('· #' + id + ' …');
+        log('· ' + id + ' …');
         const {meta, image, ext} = await fetchOne(id, contract, rpcList, gws);
-        zip.file(`#${id}.json`, JSON.stringify(meta, null, 2));
-        if(image){ zip.file(`#${id}${ext}`, image); }
+        // Nomi file SENZA "#"
+        zip.file(`${id}.json`, JSON.stringify(meta, null, 2));
+        if(image){ zip.file(`${id}${ext}`, image); }
         ok++;
       }catch(err){
-        log('  ⚠️ #' + id + ' — ' + err.message);
+        log('  ⚠️ ' + id + ' — ' + err.message);
       }
     }
 
     const blob = await zip.generateAsync({type:'blob'});
     const first = ids[0], last = ids[ids.length-1];
-    const filename = (ids.length===1) ? `doodles_#${first}.zip` : `doodles_#${first}-#${last}.zip`;
+    const filename = (ids.length===1) ? `doodles_${first}.zip` : `doodles_${first}-${last}.zip`;
 
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -356,51 +346,7 @@ async function download(){
   }
 }
 
-// Rileva iOS / modalità standalone (PWA)
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-let currentObjectUrl = null;
-
-function showOverlay(url, filename){
-  currentObjectUrl = url;
-  $('#previewImg').src = url;
-  $('#openNew').href = url;
-  $('#openNew').download = filename || '';
-  $('#overlay').style.display = 'flex';
-}
-
-function hideOverlay(){
-  $('#overlay').style.display = 'none';
-  $('#previewImg').src = '';
-  if(currentObjectUrl){ URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; }
-}
-$('#closeOverlay').addEventListener('click', hideOverlay);
-
-async function openBlobSmart(blob, filename){
-  const url = URL.createObjectURL(blob);
-  // 1) Su desktop: prova nuova scheda
-  if(!isIOS && !isStandalone){
-    const w = window.open(url, '_blank');
-    if(w){ return; }
-  }
-  // 2) Prova anchor programmatico
-  const a = document.createElement('a');
-  a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.download = filename || '';
-  document.body.appendChild(a); a.click(); a.remove();
-  // 3) Fallback iOS / PWA: overlay inline
-  if(isIOS || isStandalone){ showOverlay(url, filename); }
-}
-
-// doppio wiring per sicurezza (inline onclick + addEventListener)
-try { $('#go').addEventListener('click', function(){ try{ log('🟦 Click ricevuto'); }catch{} }); } catch {}
+$('#go').addEventListener('click', download);
 </script>
-  <div id="overlay" class="overlay">
-    <div class="actions">
-      <a id="openNew" class="action" target="_blank" rel="noopener">Apri in nuova scheda</a>
-      <button id="closeOverlay" class="action" type="button">Chiudi</button>
-    </div>
-    <img id="previewImg" class="preview" alt="Preview"/>
-    <div class="hint">Suggerimento iPad: tocca e tieni premuto sull'immagine per salvarla in Foto/Files.</div>
-  </div>
 </body>
 </html>
