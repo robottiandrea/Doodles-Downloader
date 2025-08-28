@@ -29,11 +29,15 @@
   </style>
   <!-- JSZip per creare lo ZIP client-side -->
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
 </head>
 <body>
   <div class="wrap">
     <div class="card">
       <h1>Doodles Downloader (solo client‑side, ideale su iPad)</h1>
+<div class="split"><span class="badge" id="ver">v‑loading…</span></div>
       <p class="muted">Scarica metadati + immagini direttamente da <span class="badge">Ethereum RPC</span> e <span class="badge">IPFS</span>, senza server né API key.</p>
 
       <div class="row">
@@ -106,6 +110,16 @@
   </div>
 
 <script>
+// ====== Bootstrap & anti-cache ======
+const APP_VERSION = '2025-08-28-1';
+try { document.getElementById('ver').textContent = 'v ' + APP_VERSION; } catch {}
+// Svuota eventuali Service Worker residui su questo scope (in caso di test PWA precedenti)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+}
+// Se la pagina torna dal back-forward cache di iOS, forza reload
+window.addEventListener('pageshow', (e)=>{ if (e.persisted) location.reload(); });
+
 // ====== Config in-page ======
 const DEFAULT_RPC_LIST = [
   'https://cloudflare-eth.com',
@@ -165,18 +179,20 @@ async function rpcCall(method, params, rpcList){
 }
 
 function ipfsToUrls(uri, gws){
+  const stamp = 'v=' + APP_VERSION + '-' + Date.now();
+  const addCb = (u) => u + (u.includes('?') ? '&' : '?') + stamp;
   if(typeof uri !== 'string') return [];
   if(uri.startsWith('ipfs://')){
     const path = uri.replace('ipfs://','');
-    return gws.map(gw => gw + path);
+    return gws.map(gw => addCb(gw + path));
   }
-  return [uri];
+  return [addCb(uri)];
 }
 
 async function fetchJsonAny(urls){
   for(const u of urls){
     try{
-      const r = await fetch(u, { headers: { 'Accept':'application/json' } });
+      const r = await fetch(u, { cache:'no-store', headers: { 'Accept':'application/json' } });
       if(r.ok){
         try{ return await r.json(); }catch{}
       }
@@ -188,7 +204,7 @@ async function fetchJsonAny(urls){
 async function fetchBytesAny(urls){
   for(const u of urls){
     try{
-      const r = await fetch(u);
+      const r = await fetch(u, { cache:'no-store' });
       if(r.ok){
         const ct = (r.headers.get('content-type')||'').toLowerCase();
         const blob = await r.blob();
