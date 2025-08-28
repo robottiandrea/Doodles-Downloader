@@ -88,7 +88,7 @@
         </div>
         <div>
           <label>&nbsp;</label>
-          <button id="go" class="btn">Scarica ZIP</button>
+          <button id="go" class="btn">Scarica</button>
         </div>
       </div>
 
@@ -197,7 +197,12 @@ async function fetchBytesAny(urls){
           else if(low.endsWith('.jpg')||low.endsWith('.jpeg')) ext = '.jpg';
           else if(low.endsWith('.png')) ext = '.png';
         }
-        return {buf, ext};
+        let type = 'application/octet-stream';
+        if(ct) type = ct;
+        else if(ext === '.png') type = 'image/png';
+        else if(ext === '.jpg') type = 'image/jpeg';
+        else if(ext === '.gif') type = 'image/gif';
+        return {buf, ext, type};
       }
     }catch{}
   }
@@ -220,12 +225,12 @@ async function fetchOne(tokenId, contract, rpcList, gws){
 
   // 3) image
   const imageUri = meta.image || meta.image_url || meta.imageIpfs;
-  let image = null, ext = '.png';
+  let image = null, ext = '.png', type = 'application/octet-stream';
   if(imageUri){
     const r = await fetchBytesAny(ipfsToUrls(imageUri, gws));
-    if(r){ image = r.buf; ext = r.ext; }
+    if(r){ image = r.buf; ext = r.ext; type = r.type; }
   }
-  return { meta, image, ext };
+  return { meta, image, ext, type };
 }
 
 async function download(){
@@ -255,6 +260,30 @@ async function download(){
       ids = [n];
     }
 
+    // === Modalità SINGOLO: apri direttamente l'immagine in una nuova scheda ===
+    if(ids.length===1 && mode==='single'){
+      const id = ids[0];
+      log('Carico #' + id + ' …');
+      const {meta, image, ext, type} = await fetchOne(id, contract, rpcList, gws);
+      if(image){
+        const blob = new Blob([image], {type: type || (ext==='.png'?'image/png': ext==='.jpg'?'image/jpeg': ext==='.gif'?'image/gif':'application/octet-stream')});
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        log('✅ Immagine aperta in una nuova scheda. Tieni premuto per “Salva su Foto/Files”.');
+      } else {
+        // se non c'è immagine, scarica JSON
+        const blob = new Blob([JSON.stringify(meta,null,2)], {type:'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `#${id}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        log('⚠️ Nessuna immagine nei metadata: scaricato JSON.');
+      }
+      return;
+    }
+
+    // === Range o multi: ZIP come prima ===
     log('Avvio download: ' + ids.length + ' token…');
     const zip = new JSZip();
     let ok = 0;
