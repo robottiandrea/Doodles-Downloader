@@ -20,6 +20,12 @@
     .row + .row, .row3 + .row, .row + .row3{margin-top:12px}
     .hint{font-size:12px; color:#b5bed0}
     .split{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+      /* Overlay preview per iPad/iOS */
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.86);display:none;align-items:center;justify-content:center;padding:16px;z-index:9999}
+    .overlay img.preview{max-width:min(95vw,1400px);max-height:88vh;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+    .overlay .actions{position:absolute;top:12px;right:12px;display:flex;gap:8px}
+    .overlay .action{background:#0d1016;color:#eef2ff;border:1px solid #2a3142;border-radius:10px;padding:8px 12px;cursor:pointer}
+    .overlay .hint{position:absolute;bottom:14px;left:0;right:0;text-align:center;color:#b5bed0;font-size:12px}
   </style>
   <!-- JSZip per creare lo ZIP client-side -->
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -88,7 +94,7 @@
         </div>
         <div>
           <label>&nbsp;</label>
-          <button id="go" class="btn">Scarica</button>
+          <button id="go" class="btn">Scarica ZIP</button>
         </div>
       </div>
 
@@ -260,18 +266,16 @@ async function download(){
       ids = [n];
     }
 
-    // === Modalità SINGOLO: apri direttamente l'immagine in una nuova scheda ===
+    // === Modalità SINGOLO: apri direttamente l'immagine (con fallback iPad overlay) ===
     if(ids.length===1 && mode==='single'){
       const id = ids[0];
       log('Carico #' + id + ' …');
       const {meta, image, ext, type} = await fetchOne(id, contract, rpcList, gws);
       if(image){
         const blob = new Blob([image], {type: type || (ext==='.png'?'image/png': ext==='.jpg'?'image/jpeg': ext==='.gif'?'image/gif':'application/octet-stream')});
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        log('✅ Immagine aperta in una nuova scheda. Tieni premuto per “Salva su Foto/Files”.');
+        await openBlobSmart(blob, `#${id}${ext}`);
+        log('✅ Immagine aperta. Se non vedi una nuova scheda su iPad, è comparsa una **preview**: tieni premuto per salvare.');
       } else {
-        // se non c'è immagine, scarica JSON
         const blob = new Blob([JSON.stringify(meta,null,2)], {type:'application/json'});
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -317,7 +321,50 @@ async function download(){
   }
 }
 
+// Rileva iOS / modalità standalone (PWA)
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+let currentObjectUrl = null;
+
+function showOverlay(url, filename){
+  currentObjectUrl = url;
+  $('#previewImg').src = url;
+  $('#openNew').href = url;
+  $('#openNew').download = filename || '';
+  $('#overlay').style.display = 'flex';
+}
+
+function hideOverlay(){
+  $('#overlay').style.display = 'none';
+  $('#previewImg').src = '';
+  if(currentObjectUrl){ URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; }
+}
+$('#closeOverlay').addEventListener('click', hideOverlay);
+
+async function openBlobSmart(blob, filename){
+  const url = URL.createObjectURL(blob);
+  // 1) Su desktop: prova nuova scheda
+  if(!isIOS && !isStandalone){
+    const w = window.open(url, '_blank');
+    if(w){ return; }
+  }
+  // 2) Prova anchor programmatico
+  const a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.download = filename || '';
+  document.body.appendChild(a); a.click(); a.remove();
+  // 3) Fallback iOS / PWA: overlay inline
+  if(isIOS || isStandalone){ showOverlay(url, filename); }
+}
+
 $('#go').addEventListener('click', download);
 </script>
+  <div id="overlay" class="overlay">
+    <div class="actions">
+      <a id="openNew" class="action" target="_blank" rel="noopener">Apri in nuova scheda</a>
+      <button id="closeOverlay" class="action" type="button">Chiudi</button>
+    </div>
+    <img id="previewImg" class="preview" alt="Preview"/>
+    <div class="hint">Suggerimento iPad: tocca e tieni premuto sull'immagine per salvarla in Foto/Files.</div>
+  </div>
 </body>
 </html>
