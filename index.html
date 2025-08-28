@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Doodles Downloader – ETH + IPFS (client‑side)</title>
+  <style>
+    :root { --bg:#0f1115; --card:#171a21; --text:#eef2ff; --muted:#9aa3b2; --acc:#8ab4ff; }
+    *{box-sizing:border-box} body{margin:0; font:15px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      background:var(--bg); color:var(--text);} .wrap{max-width:980px;margin:0 auto;padding:24px}
+    .card{background:var(--card); border:1px solid #232938; border-radius:16px; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    h1{font-size:22px;margin:0 0 12px} p{color:var(--muted);margin:0 0 16px}
+    label{display:block;margin:8px 0 6px;color:var(--muted)} input,select,button{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2a3142;background:#0d1016;color:var(--text)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .muted{color:var(--muted)} .badge{display:inline-block; padding:2px 8px; border:1px solid #2a3142; border-radius:999px; font-size:12px; color:var(--muted)}
+    .btn{background:linear-gradient(180deg,#2b62ff,#2753d7); border:0; font-weight:600; cursor:pointer}
+    .btn:disabled{opacity:.5; cursor:not-allowed}
+    .log{height:220px; background:#0a0d12; border:1px solid #22283a; border-radius:12px; padding:10px; overflow:auto; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:13px}
+    .row + .row, .row3 + .row, .row + .row3{margin-top:12px}
+    .hint{font-size:12px; color:#b5bed0}
+    .split{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+  </style>
+  <!-- JSZip per creare lo ZIP client-side -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Doodles Downloader (solo client‑side, ideale su iPad)</h1>
+      <p class="muted">Scarica metadati + immagini direttamente da <span class="badge">Ethereum RPC</span> e <span class="badge">IPFS</span>, senza server né API key.</p>
+
+      <div class="row">
+        <div>
+          <label>Indirizzo contratto (ERC‑721)</label>
+          <input id="contract" value="0x8a90CAb2b38dba80c64b7734e58Ee1dB38B8992e" />
+          <div class="hint">Default: Doodles (mainnet). Puoi cambiarlo per altre collezioni compatibili.</div>
+        </div>
+        <div>
+          <label>Modalità</label>
+          <select id="mode">
+            <option value="range">Scarica da #n a #n</option>
+            <option value="single">Scarica un ID (#n)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row" id="rangeBox">
+        <div>
+          <label>Da #</label>
+          <input id="startId" type="number" min="1" value="1" />
+        </div>
+        <div>
+          <label>A #</label>
+          <input id="endId" type="number" min="1" value="10" />
+        </div>
+      </div>
+
+      <div class="row" id="singleBox" style="display:none">
+        <div>
+          <label>ID singolo #</label>
+          <input id="singleId" type="number" min="1" value="1451" />
+        </div>
+        <div></div>
+      </div>
+
+      <div class="row3">
+        <div>
+          <label>RPC (con CORS) – proverà in cascata</label>
+          <select id="rpc">
+            <option value="https://cloudflare-eth.com">cloudflare-eth.com</option>
+            <option value="https://eth.drpc.org">eth.drpc.org</option>
+            <option value="https://eth.llamarpc.com">eth.llamarpc.com</option>
+            <option value="https://rpc.ankr.com/eth">rpc.ankr.com/eth</option>
+            <option value="https://eth.public-rpc.com">eth.public-rpc.com</option>
+          </select>
+          <div class="hint">Se il primo fallisce, verranno provati automaticamente gli altri (lista interna).</div>
+        </div>
+        <div>
+          <label>Gateway IPFS primario</label>
+          <select id="gw">
+            <option value="https://ipfs.io/ipfs/">ipfs.io</option>
+            <option value="https://cloudflare-ipfs.com/ipfs/">cloudflare-ipfs</option>
+            <option value="https://dweb.link/ipfs/">dweb.link</option>
+            <option value="https://gateway.pinata.cloud/ipfs/">pinata</option>
+          </select>
+          <div class="hint">In caso di errore useremo altri gateway in fallback.</div>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="go" class="btn">Scarica ZIP</button>
+        </div>
+      </div>
+
+      <p class="hint" style="margin-top:10px">Suggerimento iPad: dopo il download, il file .zip finisce nell’app “File”. Puoi anche usare “Aggiungi a Home” in Safari per installare questa pagina come web app.</p>
+
+      <label style="margin-top:16px">Log</label>
+      <div id="log" class="log"></div>
+    </div>
+  </div>
+
+<script>
+// ====== Config in-page ======
+const DEFAULT_RPC_LIST = [
+  'https://cloudflare-eth.com',
+  'https://eth.drpc.org',
+  'https://eth.llamarpc.com',
+  'https://rpc.ankr.com/eth',
+  'https://eth.public-rpc.com',
+];
+const DEFAULT_IPFS_GWS = [
+  'https://ipfs.io/ipfs/',
+  'https://cloudflare-ipfs.com/ipfs/',
+  'https://dweb.link/ipfs/',
+  'https://gateway.pinata.cloud/ipfs/',
+];
+
+const $ = sel => document.querySelector(sel);
+const logEl = $('#log');
+function log(msg){ logEl.innerText += msg + "\n"; logEl.scrollTop = logEl.scrollHeight; }
+function setBusy(b){ $('#go').disabled = b; }
+
+$('#mode').addEventListener('change', (e)=>{
+  const v = e.target.value;
+  $('#rangeBox').style.display = (v==='range'? 'grid':'none');
+  $('#singleBox').style.display = (v==='single'? 'grid':'none');
+});
+
+function pad32hex(n){
+  const hex = BigInt(n).toString(16);
+  return hex.padStart(64, '0');
+}
+
+function decodeAbiString(hexdata){
+  if(!hexdata || !hexdata.startsWith('0x')) return null;
+  const h = hexdata.slice(2);
+  if(h.length < 128) return null;
+  const length = parseInt(h.slice(64,128), 16);
+  const start = 128, end = start + length*2;
+  const s_hex = h.slice(start, end);
+  try {
+    const bytes = s_hex.match(/.{1,2}/g).map(hh=>parseInt(hh,16));
+    return new TextDecoder().decode(new Uint8Array(bytes));
+  } catch{ return null; }
+}
+
+async function rpcCall(method, params, rpcList){
+  const payload = { jsonrpc:'2.0', id:1, method, params };
+  const headers = { 'Content-Type':'application/json', 'Accept':'application/json' };
+  for(const url of rpcList){
+    try{
+      const res = await fetch(url, {method:'POST', headers, body: JSON.stringify(payload)});
+      if(!res.ok) continue;
+      const data = await res.json();
+      if(data && !data.error) return data.result;
+    }catch{ /* try next */ }
+  }
+  return null;
+}
+
+function ipfsToUrls(uri, gws){
+  if(typeof uri !== 'string') return [];
+  if(uri.startsWith('ipfs://')){
+    const path = uri.replace('ipfs://','');
+    return gws.map(gw => gw + path);
+  }
+  return [uri];
+}
+
+async function fetchJsonAny(urls){
+  for(const u of urls){
+    try{
+      const r = await fetch(u, { headers: { 'Accept':'application/json' } });
+      if(r.ok){
+        try{ return await r.json(); }catch{}
+      }
+    }catch{}
+  }
+  return null;
+}
+
+async function fetchBytesAny(urls){
+  for(const u of urls){
+    try{
+      const r = await fetch(u);
+      if(r.ok){
+        const ct = (r.headers.get('content-type')||'').toLowerCase();
+        const blob = await r.blob();
+        const buf = await blob.arrayBuffer();
+        let ext = '.png';
+        if(ct.includes('gif')) ext = '.gif';
+        else if(ct.includes('jpeg')||ct.includes('jpg')) ext = '.jpg';
+        else if(ct.includes('png')) ext = '.png';
+        else {
+          const low = u.toLowerCase();
+          if(low.endsWith('.gif')) ext = '.gif';
+          else if(low.endsWith('.jpg')||low.endsWith('.jpeg')) ext = '.jpg';
+          else if(low.endsWith('.png')) ext = '.png';
+        }
+        return {buf, ext};
+      }
+    }catch{}
+  }
+  return null;
+}
+
+async function fetchOne(tokenId, contract, rpcList, gws){
+  // 1) tokenURI(uint256)
+  const selector = '0xc87b56dd'; // tokenURI
+  const data = selector + pad32hex(tokenId);
+  const callObj = { to: contract, data };
+  const result = await rpcCall('eth_call', [callObj, 'latest'], rpcList);
+  if(!result) throw new Error('RPC failure for token #' + tokenId);
+  const tokenUri = decodeAbiString(result);
+  if(!tokenUri) throw new Error('decode tokenURI failed for #' + tokenId);
+
+  // 2) metadata
+  const meta = await fetchJsonAny(ipfsToUrls(tokenUri, gws));
+  if(!meta) throw new Error('metadata unavailable for #' + tokenId);
+
+  // 3) image
+  const imageUri = meta.image || meta.image_url || meta.imageIpfs;
+  let image = null, ext = '.png';
+  if(imageUri){
+    const r = await fetchBytesAny(ipfsToUrls(imageUri, gws));
+    if(r){ image = r.buf; ext = r.ext; }
+  }
+  return { meta, image, ext };
+}
+
+async function download(){
+  setBusy(true); logEl.innerText = '';
+  try{
+    const contract = $('#contract').value.trim();
+    if(!/^0x[a-fA-F0-9]{40}$/.test(contract)) throw new Error('Indirizzo contratto non valido');
+
+    const userRpcFirst = $('#rpc').value;
+    const rpcList = [userRpcFirst, ...DEFAULT_RPC_LIST.filter(x=>x!==userRpcFirst)];
+
+    const gwFirst = $('#gw').value;
+    const gws = [gwFirst, ...DEFAULT_IPFS_GWS.filter(x=>x!==gwFirst)];
+
+    const mode = $('#mode').value;
+    let ids = [];
+    if(mode==='range'){
+      const s = parseInt($('#startId').value,10);
+      const e = parseInt($('#endId').value,10);
+      if(!Number.isFinite(s)||!Number.isFinite(e)||s<1||e<s) throw new Error('Intervallo non valido');
+      const max = e - s + 1;
+      if(max>50) throw new Error('Per sicurezza, limite demo: max 50 ID per ZIP');
+      ids = Array.from({length:max}, (_,i)=> s+i);
+    } else {
+      const n = parseInt($('#singleId').value,10);
+      if(!Number.isFinite(n)||n<1) throw new Error('ID singolo non valido');
+      ids = [n];
+    }
+
+    log('Avvio download: ' + ids.length + ' token…');
+    const zip = new JSZip();
+    let ok = 0;
+    for(const id of ids){
+      try{
+        log('· #' + id + ' …');
+        const {meta, image, ext} = await fetchOne(id, contract, rpcList, gws);
+        zip.file(`#${id}.json`, JSON.stringify(meta, null, 2));
+        if(image){ zip.file(`#${id}${ext}`, image); }
+        ok++;
+      }catch(err){
+        log('  ⚠️ #' + id + ' — ' + err.message);
+      }
+    }
+
+    const blob = await zip.generateAsync({type:'blob'});
+    const first = ids[0], last = ids[ids.length-1];
+    const filename = (ids.length===1) ? `doodles_#${first}.zip` : `doodles_#${first}-#${last}.zip`;
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    log('✅ Completato. Successi: ' + ok + '/' + ids.length + '.');
+  }catch(err){
+    log('❌ Errore: ' + err.message);
+  }finally{
+    setBusy(false);
+  }
+}
+
+$('#go').addEventListener('click', download);
+</script>
+</body>
+</html>
