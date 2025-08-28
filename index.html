@@ -98,7 +98,7 @@
         </div>
         <div>
           <label>&nbsp;</label>
-          <button id="go" class="btn">Scarica ZIP</button>
+          <button id="go" class="btn" onclick="download()">Scarica</button>
         </div>
       </div>
 
@@ -111,6 +111,25 @@
 
 <script>
 // ====== Bootstrap & anti-cache ======
+const APP_VERSION = '2025-08-28-2';
+try { document.getElementById('ver').textContent = 'v ' + APP_VERSION; } catch {}
+// Error tap: mostra errori JS nel log
+window.addEventListener('error', function(e){ try{ log('⚠️ JS error: ' + e.message); }catch{} });
+window.addEventListener('unhandledrejection', function(e){
+  var msg = '⚠️ Promise error';
+  try {
+    var r = e.reason; msg += ': ' + (r && (r.message || r.toString()));
+  } catch {}
+  try{ log(msg); }catch{}
+});
+// Svuota eventuali Service Worker residui su questo scope (in caso di test PWA precedenti)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(regs){ regs.forEach(function(r){ r.unregister(); }); });
+}
+// Se la pagina torna dal back-forward cache di iOS, forza reload
+window.addEventListener('pageshow', function(e){ if (e.persisted) location.reload(); });
+
+// ====== Config in-page ======
 const APP_VERSION = '2025-08-28-1';
 try { document.getElementById('ver').textContent = 'v ' + APP_VERSION; } catch {}
 // Svuota eventuali Service Worker residui su questo scope (in caso di test PWA precedenti)
@@ -372,7 +391,8 @@ async function openBlobSmart(blob, filename){
   if(isIOS || isStandalone){ showOverlay(url, filename); }
 }
 
-$('#go').addEventListener('click', download);
+// doppio wiring per sicurezza (inline onclick + addEventListener)
+try { $('#go').addEventListener('click', function(){ try{ log('🟦 Click ricevuto'); }catch{} }); } catch {}
 </script>
   <div id="overlay" class="overlay">
     <div class="actions">
