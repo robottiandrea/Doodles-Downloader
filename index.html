@@ -48,18 +48,18 @@
       <div class="row" id="rangeBox">
         <div>
           <label>Da #</label>
-          <input id="startId" type="number" min="1" value="1" />
+          <input id="startId" type="number" min="0" value="0" />
         </div>
         <div>
           <label>A #</label>
-          <input id="endId" type="number" min="1" value="10" />
+          <input id="endId" type="number" min="0" value="10" />
         </div>
       </div>
 
       <div class="row" id="singleBox" style="display:none">
         <div>
           <label>ID singolo #</label>
-          <input id="singleId" type="number" min="1" value="1451" />
+          <input id="singleId" type="number" min="0" value="8929" />
         </div>
         <div></div>
       </div>
@@ -279,13 +279,13 @@ async function download(){
     if(mode==='range'){
       const s = parseInt($('#startId').value,10);
       const e = parseInt($('#endId').value,10);
-      if(!Number.isFinite(s)||!Number.isFinite(e)||s<1||e<s) throw new Error('Intervallo non valido');
+      if(!Number.isFinite(s)||!Number.isFinite(e)||s<0||e<s) throw new Error('Intervallo non valido');
       const max = e - s + 1;
       if(max>50) throw new Error('Per sicurezza, limite demo: max 50 ID per ZIP');
       ids = Array.from({length:max}, (_,i)=> s+i);
     } else {
       const n = parseInt($('#singleId').value,10);
-      if(!Number.isFinite(n)||n<1) throw new Error('ID singolo non valido');
+      if(!Number.isFinite(n)||n<0) throw new Error('ID singolo non valido');
       ids = [n];
     }
 
